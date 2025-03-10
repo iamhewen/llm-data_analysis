@@ -6,12 +6,75 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.svm import SVR, SVC
 from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.metrics import mean_squared_error, r2_score, accuracy_score, classification_report
 from sklearn.pipeline import Pipeline
 import streamlit as st
 import joblib
 import os
 from pathlib import Path
+
+# 尝试导入XGBoost和LightGBM，如果不可用则跳过
+XGBOOST_AVAILABLE = False
+xgboost_error = None
+try:
+    import xgboost as xgb
+    from xgboost import XGBRegressor, XGBClassifier
+    XGBOOST_AVAILABLE = True
+except ImportError as e:
+    # 记录更详细的错误信息
+    xgboost_error = str(e)
+    pass
+except Exception as e:
+    xgboost_error = str(e)
+    pass
+
+LIGHTGBM_AVAILABLE = False
+lightgbm_error = None
+try:
+    import lightgbm as lgb
+    from lightgbm import LGBMRegressor, LGBMClassifier
+    LIGHTGBM_AVAILABLE = True
+except ImportError as e:
+    # 记录更详细的错误信息
+    lightgbm_error = str(e)
+    pass
+except Exception as e:
+    lightgbm_error = str(e)
+    pass
+
+# 检查是否存在OpenMP相关错误
+def check_openmp_error(error_msg):
+    if error_msg and "libomp.dylib" in error_msg:
+        return True
+    return False
+
+# 显示依赖错误信息
+if xgboost_error:
+    if check_openmp_error(xgboost_error):
+        st.warning(
+            "⚠️ XGBoost加载失败: 缺少OpenMP运行时库\n\n"
+            "**解决方法**:\n"
+            "1. 在终端运行: `brew install libomp`\n"
+            "2. 重启应用程序\n\n"
+            "详细错误: " + xgboost_error
+        )
+    else:
+        st.warning(f"XGBoost未能加载: {xgboost_error}")
+
+if lightgbm_error:
+    if check_openmp_error(lightgbm_error):
+        st.warning(
+            "⚠️ LightGBM加载失败: 缺少OpenMP运行时库\n\n"
+            "**解决方法**:\n"
+            "1. 在终端运行: `brew install libomp`\n"
+            "2. 重启应用程序\n\n"
+            "详细错误: " + lightgbm_error
+        )
+    else:
+        st.warning(f"LightGBM未能加载: {lightgbm_error}")
 
 # 模型保存路径
 MODELS_DIR = Path(__file__).parent / "models"
@@ -22,15 +85,30 @@ REGRESSION_MODELS = {
     "线性回归": LinearRegression,
     "随机森林回归": RandomForestRegressor,
     "支持向量机回归": SVR,
-    "K近邻回归": KNeighborsRegressor
+    "K近邻回归": KNeighborsRegressor,
+    "决策树回归": DecisionTreeRegressor,
+    "神经网络回归": MLPRegressor
 }
 
 CLASSIFICATION_MODELS = {
     "逻辑回归": LogisticRegression,
     "随机森林分类": RandomForestClassifier,
     "支持向量机分类": SVC,
-    "K近邻分类": KNeighborsClassifier
+    "K近邻分类": KNeighborsClassifier,
+    "决策树分类": DecisionTreeClassifier,
+    "神经网络分类": MLPClassifier,
+    "朴素贝叶斯": GaussianNB
 }
+
+# 如果XGBoost可用，添加到模型列表
+if XGBOOST_AVAILABLE:
+    REGRESSION_MODELS["XGBoost回归"] = XGBRegressor
+    CLASSIFICATION_MODELS["XGBoost分类"] = XGBClassifier
+
+# 如果LightGBM可用，添加到模型列表
+if LIGHTGBM_AVAILABLE:
+    REGRESSION_MODELS["LightGBM回归"] = LGBMRegressor
+    CLASSIFICATION_MODELS["LightGBM分类"] = LGBMClassifier
 
 def is_classification_task(y):
     """判断是分类任务还是回归任务"""
@@ -49,7 +127,7 @@ def is_classification_task(y):
 def preprocess_data(df, target_col):
     """预处理数据"""
     if target_col not in df.columns:
-        return None, None, None, "目标列不存在"
+        return None, None, None, None, "目标列不存在"
     
     # 分离特征和目标
     X = df.drop(columns=[target_col])
@@ -255,6 +333,62 @@ def get_model_suggestions(df, target_col):
                 "pros": "简单易实现，无需训练，适合非线性关系",
                 "cons": "预测慢，需要大量内存，对特征缩放敏感",
                 "use_case": "适合小型数据集或作为基准模型"
+            })
+    
+    # 如果XGBoost可用，添加XGBoost推荐
+    if XGBOOST_AVAILABLE:
+        if is_classification:
+            suggestions.append({
+                "name": "XGBoost分类",
+                "reason": "高性能梯度提升树模型，在各类比赛中表现优异",
+                "pros": "预测精度高，可处理缺失值，内置正则化",
+                "cons": "参数较多需要调优，计算资源消耗大",
+                "use_case": "适合各类复杂分类问题，特别是结构化数据"
+            })
+        else:
+            suggestions.append({
+                "name": "XGBoost回归",
+                "reason": "高性能梯度提升树模型，在各类比赛中表现优异",
+                "pros": "预测精度高，可处理缺失值，内置正则化",
+                "cons": "参数较多需要调优，计算资源消耗大",
+                "use_case": "适合各类复杂回归问题，特别是结构化数据"
+            })
+    else:
+        # 如果XGBoost不可用，添加提示信息
+        if is_classification:
+            suggestions.append({
+                "name": "XGBoost分类 (需安装)",
+                "reason": "高性能梯度提升树模型，在各类比赛中表现优异",
+                "pros": "预测精度高，可处理缺失值，内置正则化",
+                "cons": "当前环境中不可用，需要安装OpenMP运行时库。Mac用户请运行 'brew install libomp'",
+                "use_case": "适合各类复杂分类问题，特别是结构化数据"
+            })
+        else:
+            suggestions.append({
+                "name": "XGBoost回归 (需安装)",
+                "reason": "高性能梯度提升树模型，在各类比赛中表现优异",
+                "pros": "预测精度高，可处理缺失值，内置正则化",
+                "cons": "当前环境中不可用，需要安装OpenMP运行时库。Mac用户请运行 'brew install libomp'",
+                "use_case": "适合各类复杂回归问题，特别是结构化数据"
+            })
+    
+    # 如果LightGBM可用，添加LightGBM推荐
+    if LIGHTGBM_AVAILABLE:
+        if is_classification:
+            suggestions.append({
+                "name": "LightGBM分类",
+                "reason": "高效梯度提升树模型，速度快且内存占用小",
+                "pros": "训练速度快，内存占用小，支持类别特征直接输入",
+                "cons": "在小数据集上可能不如XGBoost",
+                "use_case": "适合大规模数据集的分类问题"
+            })
+        else:
+            suggestions.append({
+                "name": "LightGBM回归",
+                "reason": "高效梯度提升树模型，速度快且内存占用小",
+                "pros": "训练速度快，内存占用小，支持类别特征直接输入",
+                "cons": "在小数据集上可能不如XGBoost",
+                "use_case": "适合大规模数据集的回归问题"
             })
     
     return suggestions

@@ -1,4 +1,12 @@
 import streamlit as st
+
+# 设置页面 - 必须是第一个Streamlit命令
+st.set_page_config(
+    page_title="热点数据分析与机器学习应用平台",
+    page_icon="📊",
+    layout="wide"
+)
+
 import pandas as pd
 import numpy as np
 import json
@@ -15,13 +23,6 @@ from visualization import (
 from ml_models import train_model, predict, get_model_suggestions
 from config import load_config, update_model_config
 
-# 设置页面
-st.set_page_config(
-    page_title="数据分析与机器学习应用",
-    page_icon="📊",
-    layout="wide"
-)
-
 # 初始化会话状态
 if 'data' not in st.session_state:
     st.session_state.data = None
@@ -37,69 +38,77 @@ if 'target_column' not in st.session_state:
     st.session_state.target_column = None
 
 # 侧边栏 - 导航
-st.sidebar.title("导航")
+st.sidebar.title("功能分类")
 page = st.sidebar.radio("选择页面", ["数据上传与分析", "模型训练与预测", "设置"])
 
 # 数据上传与分析页面
 if page == "数据上传与分析":
-    st.title("数据上传与分析")
+    st.title("热点数据上传与分析")
     
-    # 文件上传
-    uploaded_file = st.file_uploader("上传CSV或TXT文件", type=["csv", "txt"])
+    # 文件上传 - 添加key参数以保持状态
+    uploaded_file = st.file_uploader("上传CSV或TXT文件", type=["csv", "txt"], key="file_uploader")
     
+    # 检查是否有新文件上传
     if uploaded_file is not None:
-        # 加载数据
-        df, error = load_data(uploaded_file)
+        # 检查是否与当前缓存的文件名不同（新上传）
+        if st.session_state.filename != uploaded_file.name:
+            # 加载数据
+            df, error = load_data(uploaded_file)
+            
+            if error:
+                st.error(error)
+            else:
+                st.session_state.data = df
+                st.session_state.filename = uploaded_file.name
+                st.success(f"成功加载文件: {uploaded_file.name}")
+    
+    # 如果会话中已有数据，则显示它
+    if st.session_state.data is not None:
+        df = st.session_state.data
+        st.success(f"当前加载的文件: {st.session_state.filename}")
         
-        if error:
-            st.error(error)
-        else:
-            st.session_state.data = df
-            st.session_state.filename = uploaded_file.name
-            st.success(f"成功加载文件: {uploaded_file.name}")
-            
-            # 显示数据预览
-            st.subheader("数据预览")
-            st.dataframe(df.head())
-            
-            # 数据基本信息
-            st.subheader("数据基本信息")
-            info = analyze_data(df)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"行数: {info['行数']}")
-                st.write(f"列数: {info['列数']}")
-            
-            with col2:
-                st.write("列名: " + ", ".join(info['列名']))
-            
-            # 数据类型和缺失值
-            st.subheader("数据类型和缺失值")
-            type_missing_df = pd.DataFrame({
-                "数据类型": info["数据类型"],
-                "缺失值数量": info["缺失值"],
-                "唯一值数量": info["唯一值数量"]
-            })
-            st.dataframe(type_missing_df)
-            
-            # 数值统计
-            if "数值统计" in info:
-                st.subheader("数值统计")
-                for col, stats in info["数值统计"].items():
-                    st.write(f"**{col}**")
-                    stats_df = pd.DataFrame(stats, index=[0])
-                    st.dataframe(stats_df)
-            
-            # 使用LLM分析数据
-            st.subheader("数据分析与可视化建议")
-            
-            if st.button("获取AI分析建议"):
-                with st.spinner("正在分析数据..."):
-                    llm_response = get_llm_suggestion(info)
-                    st.session_state.llm_response = llm_response
-            
-            if st.session_state.llm_response:
+        # 显示数据预览
+        st.subheader("数据预览")
+        st.dataframe(df.head())
+        
+        # 数据基本信息
+        st.subheader("数据基本信息")
+        info = analyze_data(df)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"行数: {info['行数']}")
+            st.write(f"列数: {info['列数']}")
+        
+        with col2:
+            st.write("列名: " + ", ".join(info['列名']))
+        
+        # 数据类型和缺失值
+        st.subheader("数据类型和缺失值")
+        type_missing_df = pd.DataFrame({
+            "数据类型": info["数据类型"],
+            "缺失值数量": info["缺失值"],
+            "唯一值数量": info["唯一值数量"]
+        })
+        st.dataframe(type_missing_df)
+        
+        # 数值统计
+        if "数值统计" in info:
+            st.subheader("数值统计")
+            for col, stats in info["数值统计"].items():
+                st.write(f"**{col}**")
+                stats_df = pd.DataFrame(stats, index=[0])
+                st.dataframe(stats_df)
+        
+        # 使用LLM分析数据
+        st.subheader("数据分析与可视化建议")
+        
+        if st.button("获取AI分析建议"):
+            with st.spinner("正在分析数据..."):
+                llm_response = get_llm_suggestion(info)
+                st.session_state.llm_response = llm_response
+        
+        if st.session_state.llm_response:
                 # 显示原始响应
                 with st.expander("查看AI完整分析"):
                     st.write(st.session_state.llm_response)
@@ -272,9 +281,9 @@ elif page == "模型训练与预测":
             # 处理预测
             if submit_button:
                 prediction, error = predict(
-                    st.session_state.trained_model, 
-                    feature_inputs, 
-                    df, 
+                    st.session_state.trained_model,
+                    feature_inputs,
+                    df,
                     target_col
                 )
                 
@@ -282,13 +291,6 @@ elif page == "模型训练与预测":
                     st.error(error)
                 else:
                     st.success(f"预测结果: {prediction}")
-                    
-                    # 显示预测结果的可视化（如果适用）
-                    if pd.api.types.is_numeric_dtype(df[target_col]):
-                        # 对于回归任务，显示预测值与实际值的分布
-                        fig = px.histogram(df, x=target_col, title=f"{target_col} 分布")
-                        fig.add_vline(x=prediction, line_dash="dash", line_color="red", annotation_text="预测值")
-                        st.plotly_chart(fig, use_container_width=True)
 
 # 设置页面
 elif page == "设置":
@@ -298,67 +300,45 @@ elif page == "设置":
     
     # 加载当前配置
     config = load_config()
+    openai_config = config["llm_models"].get("openai", {})
     
     # 创建表单
     with st.form("llm_config_form"):
-        # OpenAI配置
-        st.write("**OpenAI配置**")
-        openai_config = config["llm_models"].get("openai", {})
-        openai_api_key = st.text_input(
-            "OpenAI API密钥", 
-            value=openai_config.get("api_key", ""),
-            type="password"
+        api_key = st.text_input("OpenAI API密钥", value=openai_config.get("api_key", ""), type="password")
+        model_name = st.selectbox(
+            "模型", 
+            ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"], 
+            index=0 if openai_config.get("model") not in ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"] else ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"].index(openai_config.get("model"))
         )
-        openai_model = st.selectbox(
-            "OpenAI模型",
-            ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"],
-            index=0 if not openai_config.get("model") else ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"].index(openai_config.get("model"))
-        )
-        openai_api_base = st.text_input(
-            "API地址 (可选，留空使用默认地址)",
-            value=openai_config.get("api_base", "")
-        )
-        
-        # 其他模型配置可以在这里添加
-        # ...
+        api_base = st.text_input("API基础URL (可选，用于自定义端点)", value=openai_config.get("api_base", ""))
         
         # 提交按钮
         submit_button = st.form_submit_button("保存配置")
     
     # 处理表单提交
     if submit_button:
-        # 更新OpenAI配置
-        update_model_config("openai", openai_api_key, openai_model, openai_api_base)
-        
-        # 更新其他模型配置
-        # ...
-        
+        update_model_config("openai", api_key, model_name, api_base)
         st.success("配置已保存")
     
-    # 显示当前配置
-    with st.expander("查看当前配置"):
-        st.json(config)
+    # 显示XGBoost和LightGBM状态
+    st.subheader("高级模型状态")
     
-    # 添加使用说明
-    st.subheader("使用说明")
-    st.markdown("""
-    ### 数据上传与分析
-    1. 上传CSV或TXT格式的数据文件
-    2. 查看数据基本信息和统计数据
-    3. 点击"获取AI分析建议"获取数据可视化和模型推荐
-    4. 探索推荐的可视化图表
+    from ml_models import XGBOOST_AVAILABLE, LIGHTGBM_AVAILABLE
     
-    ### 模型训练与预测
-    1. 选择目标列（要预测的变量）
-    2. 从推荐的模型中选择一个进行训练
-    3. 查看模型评估指标
-    4. 输入特征值进行预测
+    if XGBOOST_AVAILABLE:
+        st.success("✅ XGBoost 已可用")
+    else:
+        st.warning("⚠️ XGBoost 不可用 - 请安装OpenMP运行时库")
+        st.code("brew install libomp", language="bash")
+        st.markdown("安装后，请重启应用程序以使更改生效。")
     
-    ### 设置
-    1. 配置大语言模型API密钥和模型
-    2. 保存配置以便后续使用
-    """)
+    if LIGHTGBM_AVAILABLE:
+        st.success("✅ LightGBM 已可用")
+    else:
+        st.warning("⚠️ LightGBM 不可用")
+        st.code("pip install lightgbm", language="bash")
+        st.markdown("安装后，请重启应用程序以使更改生效。")
 
 # 页脚
 st.sidebar.markdown("---")
-st.sidebar.info("数据分析与机器学习应用 v1.0")
+st.sidebar.info("热点数据分析与机器学习应用平台 v1.0")

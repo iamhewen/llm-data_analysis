@@ -7,3 +7,5 @@ scikit-learn>=1.2.2
 openai>=0.27.8
 python-dotenv>=1.0.0
 joblib>=1.2.0
+xgboost>=1.7.0
+lightgbm>=3.3.5

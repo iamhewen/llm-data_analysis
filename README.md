@@ -4,6 +4,13 @@
 - Python 3.8+ 
 - macOS/Linux/Windows（推荐macOS）
 
+### 特殊依赖
+- **Mac用户注意**：本项目使用的XGBoost和LightGBM需要OpenMP运行时库
+  ```bash
+  brew install libomp
+  ```
+  如果遇到"Library not loaded: @rpath/libomp.dylib"错误，请执行上述命令安装依赖
+
 ## 安装步骤
 1. 克隆仓库
 ```bash
@@ -53,4 +60,4 @@ A: 检查是否选择了有效的列组合，数值列需包含有效数据
 
 [//]: # (以下为自动生成的联系方式)
 ## 技术支持
-联系邮箱：support@data-analysis.com
+联系邮箱：youwin_one@126.com
